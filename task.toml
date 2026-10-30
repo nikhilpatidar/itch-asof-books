@@ -1,0 +1,47 @@
+artifacts = ["/app/src/bookd.cpp"]
+
+schema_version = "1.4"
+
+[task]
+name = "samples/itch-asof-books"
+description = "Speed up full-depth as-of ITCH books across bulk history, live serving, per-message rewrites, and a memory cap."
+
+[metadata]
+difficulty = "hard"
+category = "systems"
+subcategory = "Performance"
+tags = [
+  "itch",
+  "order-book",
+  "as-of",
+  "performance",
+  "memory",
+]
+task_objective = [
+  "optimize",
+  "implement",
+]
+artifact_type = [
+  "codebase",
+]
+expert_time_estimate_hours = 12
+difficulty_explanation = "The starter already speaks the APPLY/QUERY/SNAP protocol and produces correct full-depth as-of books via per-symbol checkpointed rebuild after rewrites. Four private synthetic families (bulk / serving / backfill / spill) each rewrite about 12000 out-of-order adds and ask mid-span books; serving also streams the log in chunks with interleaved queries inside the timed window. Matching the starter scores near zero on the floor-relative CPU scale. Reaching the verifier-held reference bound requires order-diff propagation across checkpoints (or an equivalent that keeps rewrite work sublinear in history), O(1) book ops, and staying under a 384 MiB peak RSS cap. Traps include dense full-history snapshots, deferred rewrite work after READY, tip-only books, and hanging after QUIT."
+solution_explanation = "Replace rebuild-on-rewrite with per-symbol checkpoints plus order-diff patches: each rewritten add pushes a compact difference through later records and attaches a patch to affected checkpoints so as-of queries still replay at most one checkpoint interval. Executions record depth so most records skip; when an execution could touch a differing order it is re-simulated in both timelines. All rewrite work finishes synchronously inside APPLY before READY. Books index price levels by stable per-symbol price ids with rank bitmaps for O(1) ops."
+verification_explanation = "The verifier harvests expected full-depth books from a sealed oracle binary, cross-checks them with an independent rebuild checker, then times the baked starter, a sealed reference floor engine, and the submission on four families (REPEATS=5, trimmed median of max(/proc, wait4) CPU). Score is the minimum over families of min(1, ln(T_start/T)/ln(T_start/T_floor)). Wrong books, RSS over 393216 KB, crashes, hangs, read timeouts, or a second process under the engine uid score 0."
+
+[verifier]
+timeout_sec = 3600.0
+environment_mode = "separate"
+network_mode = "no-network"
+
+[agent]
+timeout_sec = 72000.0
+
+[environment]
+build_timeout_sec = 1800.0
+cpus = 4
+memory_mb = 8192
+storage_mb = 10240
+gpus = 0
+network_mode = "public"
+mcp_servers = []
